@@ -14,10 +14,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Create JWT for Google API auth
     const token = await getGoogleAccessToken(CLIENT_EMAIL, PRIVATE_KEY);
 
-    // Check if header row exists, if not create it
     const rangeCheck = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Sheet1!A1:G1`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -30,7 +28,6 @@ export default async function handler(req, res) {
       rows.push(['Date', 'Description', 'Amount', 'Currency', 'Category', 'Raw Transcript', 'Logged At']);
     }
 
-    const loggedAt = new Date().toISOString();
     rows.push([
       date || '',
       description || '',
@@ -38,18 +35,14 @@ export default async function handler(req, res) {
       currency || 'NGN',
       category || '',
       transcript || '',
-      loggedAt,
+      new Date().toISOString(),
     ]);
 
-    // Append rows to sheet
     const appendRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Sheet1!A1:G1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: rows }),
       }
     );
@@ -67,7 +60,6 @@ export default async function handler(req, res) {
   }
 }
 
-// Minimal JWT implementation for Google service account auth
 async function getGoogleAccessToken(clientEmail, privateKey) {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
@@ -79,12 +71,9 @@ async function getGoogleAccessToken(clientEmail, privateKey) {
     iat: now,
   };
 
-  const b64 = (obj) =>
-    Buffer.from(JSON.stringify(obj)).toString('base64url');
-
+  const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
   const signingInput = `${b64(header)}.${b64(payload)}`;
 
-  // Import the private key
   const keyData = privateKey
     .replace(/-----BEGIN PRIVATE KEY-----/, '')
     .replace(/-----END PRIVATE KEY-----/, '')
@@ -92,22 +81,17 @@ async function getGoogleAccessToken(clientEmail, privateKey) {
 
   const binaryKey = Buffer.from(keyData, 'base64');
   const cryptoKey = await globalThis.crypto.subtle.importKey(
-    'pkcs8',
-    binaryKey,
+    'pkcs8', binaryKey,
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign']
+    false, ['sign']
   );
 
   const signature = await globalThis.crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    Buffer.from(signingInput)
+    'RSASSA-PKCS1-v1_5', cryptoKey, Buffer.from(signingInput)
   );
 
   const jwt = `${signingInput}.${Buffer.from(signature).toString('base64url')}`;
 
-  // Exchange JWT for access token
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
